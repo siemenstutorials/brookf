@@ -3,14 +3,14 @@ PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 export PATH
 
 #=================================================
-#    System Required: CentOS/Debian/Ubuntu
-#    Description: Brook
-#    Version: 1.0.6
-#    Author: Toyo
-#    Blog: https://siemenstutorials.com
+#   System Required: CentOS/Debian/Ubuntu
+#   Description: Brook
+#   Version: 1.0.1
+#   Author: Toyo, yulewang(DDNS features), monret(CNAME, iptables)
+#   Blog: https://doub.io/wlzy-jc37/
 #=================================================
 
-sh_ver="1.0.6"
+sh_ver="1.0.1"
 filepath=$(cd "$(dirname "$0")"; pwd)
 file_1=$(echo -e "${filepath}"|awk -F "$0" '{print $1}')
 file="/usr/local/brook-pf"
@@ -46,6 +46,15 @@ check_sys(){
     fi
     bit=`uname -m`
 }
+Install_Tools(){
+        echo "正在安装依赖...."
+        if [[ ${release} == "centos" ]]; then
+            yum install bind-utils -y  &> /dev/null
+        else
+            apt-get install dnsutils -y &> /dev/null
+        fi
+        echo "安装完成"
+}
 check_installed_status(){
     [[ ! -e ${brook_file} ]] && echo -e "${Error} Brook 没有安装，请检查 !" && exit 1
 }
@@ -68,34 +77,13 @@ check_pid(){
     PID=$(ps -ef| grep "brook relays"| grep -v grep| grep -v ".sh"| grep -v "init.d"| grep -v "service"| awk '{print $2}')
 }
 check_new_ver(){
-    echo -e "请输入要下载安装的 Brook 版本号 ${Green_font_prefix}[ 格式是日期，例如: v20180909 ]${Font_color_suffix}
-版本列表请去这里获取：${Green_font_prefix}[ https://github.com/txthinking/brook/releases ]${Font_color_suffix}"
-    read -e -p "直接回车即自动获取:" brook_new_ver
+    brook_new_ver=v20200801
     if [[ -z ${brook_new_ver} ]]; then
         brook_new_ver=$(wget -qO- https://api.github.com/repos/txthinking/brook/releases| grep "tag_name"| head -n 1| awk -F ":" '{print $2}'| sed 's/\"//g;s/,//g;s/ //g')
         [[ -z ${brook_new_ver} ]] && echo -e "${Error} Brook 最新版本获取失败！" && exit 1
         echo -e "${Info} 检测到 Brook 最新版本为 [ ${brook_new_ver} ]"
     else
         echo -e "${Info} 开始下载 Brook [ ${brook_new_ver} ] 版本！"
-    fi
-}
-check_ver_comparison(){
-    brook_now_ver=$(${brook_file} -v|awk '{print $3}')
-    [[ -z ${brook_now_ver} ]] && echo -e "${Error} Brook 当前版本获取失败 !" && exit 1
-    brook_now_ver="v${brook_now_ver}"
-    if [[ "${brook_now_ver}" != "${brook_new_ver}" ]]; then
-        echo -e "${Info} 发现 Brook 已有新版本 [ ${brook_new_ver} ]，旧版本 [ ${brook_now_ver} ]"
-        read -e -p "是否更新 ? [Y/n] :" yn
-        [[ -z "${yn}" ]] && yn="y"
-        if [[ $yn == [Yy] ]]; then
-            check_pid
-            [[ ! -z $PID ]] && kill -9 ${PID}
-            rm -rf ${brook_file}
-            Download_brook
-            Start_brook
-        fi
-    else
-        echo -e "${Info} 当前 Brook 已是最新版本 [ ${brook_new_ver} ]" && exit 1
     fi
 }
 check_domain_ip_change(){
@@ -110,7 +98,7 @@ check_domain_ip_change(){
         user_Enabled_pf=$(echo "${user_all}"|sed -n "${integer}p"|awk '{print $4}')
         user_domain_pf=$(echo "${user_all}"|sed -n "${integer}p"|awk '{print $5}')
         if [ ! -z "$user_domain_pf" ]; then
-            ip=`dig +short ${user_domain_pf} | grep -Eo '[0-9\.]{7,15}' | head -1`
+            ip=$(host -t a  $user_domain_pf|grep -E -o "([0-9]{1,3}[\.]){3}[0-9]{1,3}"|head -1)
             if [ -n "$ip" ]; then
                 echo -e "Check domain IP: $ip"
             else
@@ -137,9 +125,9 @@ Download_brook(){
     [[ ! -e ${file} ]] && mkdir ${file}
     cd ${file}
     if [[ ${bit} == "x86_64" ]]; then
-        wget --no-check-certificate -N "https://github.com/siemenstutorials/brookf/releases/download/v20220301/brook"
+        wget --no-check-certificate -N "https://github.com/txthinking/brook/releases/download/${brook_new_ver}/brook"
     else
-        wget --no-check-certificate -N "https://github.com/siemenstutorials/brookf/releases/download/v20220301/brook_linux_386"
+        wget --no-check-certificate -N "https://github.com/txthinking/brook/releases/download/${brook_new_ver}/brook_linux_386"
         mv brook_linux_386 brook
     fi
     [[ ! -e "brook" ]] && echo -e "${Error} Brook 下载失败 !" && exit 1
@@ -147,14 +135,14 @@ Download_brook(){
 }
 Service_brook(){
     if [[ ${release} = "centos" ]]; then
-        if ! wget --no-check-certificate https://github.com/siemenstutorials/brookf/blob/master/brook-pf_centos -O /etc/init.d/brook-pf; then
+        if ! wget --no-check-certificate https://raw.githubusercontent.com/monret/brook/master/brook-pf_centos -O /etc/init.d/brook-pf; then
             echo -e "${Error} Brook服务 管理脚本下载失败 !" && exit 1
         fi
         chmod +x /etc/init.d/brook-pf
         chkconfig --add brook-pf
         chkconfig brook-pf on
     else
-        if ! wget --no-check-certificate https://github.com/siemenstutorials/brookf/blob/master/brook-pf_debian -O /etc/init.d/brook-pf; then
+        if ! wget --no-check-certificate https://raw.githubusercontent.com/monret/brook/master/brook-pf_debian -O /etc/init.d/brook-pf; then
             echo -e "${Error} Brook服务 管理脚本下载失败 !" && exit 1
         fi
         chmod +x /etc/init.d/brook-pf
@@ -270,7 +258,7 @@ Set_brook(){
  ${Green_font_prefix}2.${Font_color_suffix}  删除 端口转发
  ${Green_font_prefix}3.${Font_color_suffix}  修改 端口转发
  ${Green_font_prefix}4.${Font_color_suffix}  启用/禁用 端口转发
-
+ 
  ${Tip} 本地监听端口不能重复，被转发的IP或端口可重复!" && echo
     read -e -p "(默认: 取消):" bk_modify
     [[ -z "${bk_modify}" ]] && echo "已取消..." && exit 1
@@ -356,8 +344,6 @@ Add_pf_with_domin(){
             echo -e "${Error} 端口转发 添加失败 ${Green_font_prefix}[端口: ${bk_port} 被转发域名和端口: ${ip}:${bk_port_pf}]${Font_color_suffix} "
             break
         else
-            Add_iptables
-            Save_iptables
             echo -e "${Info} 端口转发 添加成功 ${Green_font_prefix}[端口: ${bk_port} 被转发域名和端口: ${ip}:${bk_port_pf}]${Font_color_suffix}\n"
             read -e -p "是否继续 添加端口转发配置？[Y/n]:" addyn
             [[ -z ${addyn} ]] && addyn="y"
@@ -387,8 +373,6 @@ Add_pf(){
             echo -e "${Error} 端口转发 添加失败 ${Green_font_prefix}[端口: ${bk_port} 被转发IP和端口: ${bk_ip_pf}:${bk_port_pf}]${Font_color_suffix} "
             break
         else
-            Add_iptables
-            Save_iptables
             echo -e "${Info} 端口转发 添加成功 ${Green_font_prefix}[端口: ${bk_port} 被转发IP和端口: ${bk_ip_pf}:${bk_port_pf}]${Font_color_suffix}\n"
             read -e -p "是否继续 添加端口转发配置？[Y/n]:" addyn
             [[ -z ${addyn} ]] && addyn="y"
@@ -416,8 +400,6 @@ Del_pf(){
             break
         else
             port=${bk_port}
-            Del_iptables
-            Save_iptables
             echo -e "${Info} 端口转发 删除成功 ${Green_font_prefix}[端口: ${bk_port}]${Font_color_suffix}\n"
             port_num=$(cat ${brook_conf}|sed '/^\s*$/d'|wc -l)
             if [[ ${port_num} == 0 ]]; then
@@ -459,9 +441,6 @@ Modify_pf(){
         exit 1
     else
         port=${bk_port_Modify}
-        Del_iptables
-        Add_iptables
-        Save_iptables
         Restart_brook
         echo -e "${Info} 端口转发 修改成功 ${Green_font_prefix}[端口: ${bk_port} 被转发IP和端口: ${bk_ip_pf}:${bk_port_pf}]${Font_color_suffix}\n"
     fi
@@ -519,8 +498,9 @@ Install_brook(){
     [[ -e ${brook_file} ]] && echo -e "${Error} 检测到 Brook 已安装 !" && exit 1
     echo -e "${Info} 开始安装/配置 依赖..."
     Installation_dependency
-    #echo -e "${Info} 开始检测最新版本..."
-    #check_new_ver
+    Install_Tools
+    echo -e "${Info} 开始检测最新版本..."
+    check_new_ver
     echo -e "${Info} 开始下载/安装..."
     Download_brook
     echo -e "${Info} 开始下载/安装 服务脚本(init)..."
@@ -529,7 +509,7 @@ Install_brook(){
     echo "" > ${brook_conf}
     echo -e "${Info} 开始设置 iptables防火墙..."
     Set_iptables
-    echo -e "${Info} Brook 安装完成！默认配置文件为空，请选择 [7.设置 Brook 端口转发 - 1.添加 端口转发] 来添加端口转发。"
+    echo -e "${Info} Brook 安装完成！默认配置文件为空，请选择 [设置 Brook 端口转发 - 添加 端口转发] 来添加端口转发。"
 }
 Start_brook(){
     check_installed_status
@@ -549,23 +529,6 @@ Restart_brook(){
     [[ ! -z ${PID} ]] && /etc/init.d/brook-pf stop
     /etc/init.d/brook-pf start
 }
-Update_brook(){
-    check_installed_status
-    echo && echo -e "请选择你的服务器是国内还是国外
- ${Green_font_prefix}1.${Font_color_suffix}  国内服务器(逗比云)
- ${Green_font_prefix}2.${Font_color_suffix}  国外服务器(Github)
-
- ${Tip} 因为国内对 Github 限速，这会导致国内服务器下载速度极慢，所以选择 国内服务器 选项就会从我的 逗比云 下载!" && echo
-    read -e -p "(默认: 2 国外服务器):" bk_Download
-    [[ -z "${bk_Download}" ]] && bk_Download="2"
-    if [[ ${bk_Download} == "1" ]]; then
-        Download_type="1"
-    else
-        Download_type="2"
-    fi
-    check_new_ver
-    check_ver_comparison
-}
 Uninstall_brook(){
     check_installed_status
     echo -e "确定要卸载 Brook ? [y/N]\n"
@@ -581,9 +544,7 @@ Uninstall_brook(){
                 for((integer = 1; integer <= ${user_all_num}; integer++))
                 do
                     port=$(echo "${user_all}"|sed -n "${integer}p"|awk '{print $1}')
-                    Del_iptables
                 done
-                Save_iptables
             fi
         fi
         if [[ ! -z $(crontab -l | grep "brook-pf-mod.sh monitor") ]]; then
@@ -636,7 +597,7 @@ Set_crontab_monitor_brook(){
 crontab_monitor_brook_cron_start(){
     crontab -l > "$file_1/crontab.bak"
     sed -i "/brook-pf-mod.sh monitor/d" "$file_1/crontab.bak"
-    echo -e "\n*/2 * * * *  /bin/bash $file_1/brook-pf-mod.sh monitor" >> "$file_1/crontab.bak"
+    echo -e "\n*/1 * * * *  /bin/bash $file_1/brook-pf-mod.sh monitor" >> "$file_1/crontab.bak"
     crontab "$file_1/crontab.bak"
     rm -r "$file_1/crontab.bak"
     cron_config=$(crontab -l | grep "brook-pf-mod.sh monitor")
@@ -677,48 +638,32 @@ crontab_monitor_brook(){
         echo -e "${Info} [$(date "+%Y-%m-%d %H:%M:%S %u %Z")] Brook服务端 进程运行正常..." | tee -a ${brook_log}
     fi
 }
-Add_iptables(){
-    iptables -I INPUT -m state --state NEW -m tcp -p tcp --dport ${bk_port} -j ACCEPT
-    iptables -I INPUT -m state --state NEW -m udp -p udp --dport ${bk_port} -j ACCEPT
-}
-Del_iptables(){
-    iptables -D INPUT -m state --state NEW -m tcp -p tcp --dport ${port} -j ACCEPT
-    iptables -D INPUT -m state --state NEW -m udp -p udp --dport ${port} -j ACCEPT
-}
-Save_iptables(){
-    if [[ ${release} == "centos" ]]; then
-        service iptables save
-    else
-        iptables-save > /etc/iptables.up.rules
-    fi
-}
 Set_iptables(){
     if [[ ${release} == "centos" ]]; then
+		systemctl stop firewalld &> /dev/null
+		systemctl mask firewalld &> /dev/null
         service iptables save
         chkconfig --level 2345 iptables on
+        iptables -P INPUT ACCEPT
+        iptables -P OUTPUT ACCEPT
+        iptables -P FORWARD ACCEPT
+        service iptables save
     else
         iptables-save > /etc/iptables.up.rules
-        echo -e '#!/bin/bash\n/sbin/iptables-restore < /etc/iptables.up.rules' > /etc/network/if-pre-up.d/iptables
-        chmod +x /etc/network/if-pre-up.d/iptables
+        iptables -P INPUT ACCEPT
+        iptables -P OUTPUT ACCEPT
+        iptables -P FORWARD ACCEPT
+        iptables-save > /etc/iptables.up.rules
     fi
+	 echo "iptables放行完成"
 }
 Resolve_Hostname_To_IP(){
-    ip=`dig +short $bk_domain_pf`
+    ip=$(host -t a  $bk_domain_pf|grep -E -o "([0-9]{1,3}[\.]){3}[0-9]{1,3}"|head -1)
     if [ -n "$ip" ]; then
         echo -e " IP: $ip"
     else
         echo -e "${Error} Could not resolve hostname [${bk_domain_pf}] !" && exit 1
     fi
-}
-Update_Shell(){
-    sh_new_ver=$(wget --no-check-certificate -qO- -t1 -T3 "https://raw.githubusercontent.com/siemenstutorials/brookf/master/brook-pf-mod.sh"|grep 'sh_ver="'|awk -F "=" '{print $NF}'|sed 's/\"//g'|head -1) && sh_new_type="github"
-    [[ -z ${sh_new_ver} ]] && echo -e "${Error} 无法链接到 Github !" && exit 0
-    if [[ -e "/etc/init.d/brook-pf" ]]; then
-        rm -rf /etc/init.d/brook-pf
-        Service_brook
-    fi
-    wget -N --no-check-certificate "https://raw.githubusercontent.com/yulewang/brook/master/brook-pf-mod.sh" && chmod +x brook-pf-mod.sh
-    echo -e "脚本已更新为最新版本[ ${sh_new_ver} ] !(注意：因为更新方式为直接覆盖当前运行的脚本，所以可能下面会提示一些报错，无视即可)" && exit 0
 }
 check_sys
 action=$1
@@ -726,21 +671,22 @@ if [[ "${action}" == "monitor" ]]; then
     crontab_monitor_brook
 else
     echo && echo -e "  Brook 端口转发 一键管理脚本修改版(DDNS支持) ${Red_font_prefix}[v${sh_ver}]${Font_color_suffix}
-
- ${Green_font_prefix} 0.${Font_color_suffix} 升级脚本
-————————————
+  
  ${Green_font_prefix} 1.${Font_color_suffix} 安装 Brook
- ${Green_font_prefix} 2.${Font_color_suffix} 更新 Brook
- ${Green_font_prefix} 3.${Font_color_suffix} 卸载 Brook
+ ${Green_font_prefix} 2.${Font_color_suffix} 卸载 Brook
 ————————————
- ${Green_font_prefix} 4.${Font_color_suffix} 启动 Brook
- ${Green_font_prefix} 5.${Font_color_suffix} 停止 Brook
- ${Green_font_prefix} 6.${Font_color_suffix} 重启 Brook
+ ${Green_font_prefix} 3.${Font_color_suffix} 启动 Brook
+ ${Green_font_prefix} 4.${Font_color_suffix} 停止 Brook
+ ${Green_font_prefix} 5.${Font_color_suffix} 重启 Brook
 ————————————
- ${Green_font_prefix} 7.${Font_color_suffix} 设置 Brook 端口转发
- ${Green_font_prefix} 8.${Font_color_suffix} 查看 Brook 端口转发
- ${Green_font_prefix} 9.${Font_color_suffix} 查看 Brook 日志
- ${Green_font_prefix}10.${Font_color_suffix} 监控 Brook 运行状态(如果使用ddns必须打开)
+ ${Green_font_prefix} 6.${Font_color_suffix} 设置 Brook 端口转发
+ ${Green_font_prefix} 7.${Font_color_suffix} 查看 Brook 端口转发
+ ${Green_font_prefix} 8.${Font_color_suffix} 查看 Brook 日志
+ ${Green_font_prefix} 9.${Font_color_suffix} 监控 Brook 运行状态(如果使用DDNS必须打开)
+ ————————————
+ ${Green_font_prefix}10.${Font_color_suffix} 安装CNAME依赖(若添加DDNS出现异常)
+ ${Green_font_prefix}11.${Font_color_suffix} 安装服务脚本(执行安装Brook后请勿重复安装)
+ ${Green_font_prefix}12.${Font_color_suffix} iptables一键放行
 ————————————" && echo
 if [[ -e ${brook_file} ]]; then
     check_pid
@@ -753,44 +699,47 @@ else
     echo -e " 当前状态: ${Red_font_prefix}未安装${Font_color_suffix}"
 fi
 echo
-read -e -p " 请输入数字 [0-10]:" num
+read -e -p " 请输入数字 [0-12]:" num
 case "$num" in
-    0)
-    Update_Shell
-    ;;
     1)
     Install_brook
     ;;
     2)
-    Update_brook
-    ;;
-    3)
     Uninstall_brook
     ;;
-    4)
+    3)
     Start_brook
     ;;
-    5)
+    4)
     Stop_brook
     ;;
-    6)
+    5)
     Restart_brook
     ;;
-    7)
+    6)
     Set_brook
     ;;
-    8)
+    7)
     check_installed_status
     list_port
     ;;
-    9)
+    8)
     View_Log
     ;;
-    10)
+    9)
     Set_crontab_monitor_brook
     ;;
+    10)
+    Install_Tools
+    ;;
+	11)
+	Service_brook
+	;;
+	12)
+	Set_iptables
+	;;
     *)
-    echo "请输入正确数字 [0-10]"
+    echo "请输入正确数字 [0-12]"
     ;;
 esac
 fi
